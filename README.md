@@ -1,3 +1,19 @@
+This fork just resurrects the recompute feature: `pkg check -r package_name`  
+Reference: https://github.com/freebsd/pkg/issues/2449
+
+To get it:
+- Clone this repo: `$ git clone https://github.com/Emrion/pkg.git`
+- `$ ./configure`
+- `$ make`
+
+You will have acces to the recompute function with `# src/pkg-static check -r package_name`.  
+
+Optionaly, you can install this modified pkg with `# make install` but this leaves the infos of the last pkg installed.
+You need to run `# pkg check -r pkg` to address the change of files. `pkg info pkg` will answer the previous version of pkg, but `pkg -v` will reveal the actual installed version.  
+
+----------------------------------
+
+
 pkg - a package manager for FreeBSD
 ====================================
 
