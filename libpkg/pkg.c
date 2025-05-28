@@ -1742,3 +1742,44 @@ pkgs_search(pkgs_t *pkgs, char *el)
 	struct pkg **res = bsearch(&tgt, pkgs->d, pkgs->len, sizeof(pkgs->d[0]), pkgs_cmp);
 	return (res);
 }
+
+int
+pkg_recompute(struct pkgdb *db, struct pkg *pkg, bool verbose)
+{
+	struct pkg_file *f = NULL;
+	int64_t flatsize = 0;
+	struct stat st;
+	pkg_checksum_type_t type;
+	char *newsum;
+	int rc = EPKG_OK;
+
+	while (pkg_files(pkg, &f) == EPKG_OK) {
+
+		if (lstat(f->path, &st) == -1) 
+			continue;
+		if (!S_ISLNK(st.st_mode)) 
+			flatsize += st.st_size;
+
+		type = pkg_checksum_file_get_type(f->sum, strlen(f->sum));
+		if (type == PKG_HASH_TYPE_UNKNOWN) 
+			type = PKG_HASH_TYPE_SHA256_HEX;
+		newsum = pkg_checksum_generate_file(f->path, type);
+		if (newsum == NULL) {
+			rc = EPKG_FATAL;
+			break;
+		}
+		if (strcmp(newsum, f->sum) != 0) {
+			if (verbose) {
+				printf("Modified: %s\n", f->path);
+				printf("Init cks: %s\n", f->sum);
+				printf("New  cks: %s\n", newsum);
+			}
+			pkgdb_file_set_cksum(db, f, newsum);
+		}
+		free(newsum);
+	}
+	if (rc == EPKG_OK && flatsize != pkg->flatsize)
+		pkg->flatsize = flatsize;
+	return (rc);
+}
+

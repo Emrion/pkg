@@ -1871,6 +1871,8 @@ pkg_set_invalid(struct pkg *p __attribute__((__unused__)),
 	abort();
 }
 
+int pkg_recompute(struct pkgdb *db, struct pkg *pkg);
+
 #define pkg_get(p, t, a) _Generic((a), \
 	const char **: pkg_get_s, \
 	int64_t *: pkg_get_i, \

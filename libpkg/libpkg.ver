@@ -233,6 +233,7 @@ global:
 	pkgdb_query_shlib_provide;
 	pkgdb_query_shlib_require;
 	pkgdb_query_which;
+	pkg_recompute;
 	pkgdb_release_lock;
 	pkgdb_repo_query;
 	pkgdb_repo_query2;
