@@ -239,6 +239,7 @@ exec_check(int argc, char **argv)
 	int ch;
 	bool dcheck = false;
 	bool checksums = false;
+	bool recompute = false;
 	bool noinstall = false;
 	int nbpkgs = 0;
 	int i, processed, total = 0;
@@ -293,7 +294,8 @@ exec_check(int argc, char **argv)
 			quiet = true;
 			break;
 		case 'r':
-			/* backward compatibility but do nothing */
+			recompute = true;
+			flags |= PKG_LOAD_FILES;
 			break;
 		case 's':
 			checksums = true;
@@ -321,14 +323,17 @@ exec_check(int argc, char **argv)
 		flags |= PKG_LOAD_FILES;
 	}
 	/* Default to all packages if no pkg provided */
-	if (argc == 0 && (dcheck || checksums)) {
+	if (argc == 0 && (dcheck || checksums || recompute)) {
 		match = MATCH_ALL;
-	} else if ((argc == 0 && match != MATCH_ALL) || !(dcheck || checksums)) {
+	} else if ((argc == 0 && match != MATCH_ALL) || !(dcheck || checksums || recompute)) {
 		usage_check();
 		return (EXIT_FAILURE);
 	}
-
-	ret = pkgdb_access(PKGDB_MODE_READ, PKGDB_DB_LOCAL);
+	if (recompute)
+		ret = pkgdb_access(PKGDB_MODE_READ|PKGDB_MODE_WRITE,
+				   PKGDB_DB_LOCAL);
+	else
+		ret = pkgdb_access(PKGDB_MODE_READ, PKGDB_DB_LOCAL);
 
 	if (ret == EPKG_ENODB) {
 		if (!quiet)
@@ -403,12 +408,27 @@ exec_check(int argc, char **argv)
 			}
 			if (checksums) {
 				if (!quiet && verbose)
-					printf(" checksums...");
+					printf(" checksums...\n");
 				if (pkg_test_filesum(pkg) != EPKG_OK) {
 					rc = EXIT_FAILURE;
 				}
 			}
-
+			if (recompute) {
+				if (pkgdb_upgrade_lock(db, PKGDB_LOCK_ADVISORY,
+						PKGDB_LOCK_EXCLUSIVE) == EPKG_OK) {
+					if (!quiet && verbose)
+						printf(" recomputing...\n");
+					if (pkg_recompute(db, pkg, verbose && !quiet) != EPKG_OK) {
+						rc = EXIT_FAILURE;
+					}
+					pkgdb_downgrade_lock(db,
+					    PKGDB_LOCK_EXCLUSIVE,
+					    PKGDB_LOCK_ADVISORY);
+				}
+				else {
+					rc = EXIT_FAILURE;
+				}
+			}
 			if (!quiet) {
 				if (!verbose)
 					++processed;
