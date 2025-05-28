@@ -6,7 +6,7 @@ To get it:
 - `$ ./configure`
 - `$ make`
 
-You will have acces to the recompute function with `# src/pkg-static check -r package_name`.  
+You will have access to the recompute function with `# src/pkg-static check -r package_name`.  
 
 Optionaly, you can install this modified pkg with `# make install` but this leaves the infos of the last pkg installed.
 You need to run `# pkg check -r pkg` to address the change of files. `pkg info pkg` will answer the previous version of pkg, but `pkg -v` will reveal the actual installed version.  
