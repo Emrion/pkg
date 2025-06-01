@@ -2,11 +2,13 @@ This fork just resurrects the recompute feature: `pkg check -r package_name`
 Reference: https://github.com/freebsd/pkg/issues/2449
 
 To get it:
-- Clone this repo: `$ git clone https://github.com/Emrion/pkg.git`
+- `$ mkdir mypkg`
+- Clone this repo: `$ git clone https://github.com/Emrion/pkg.git mypkg/`
+- `$ cd mypkg`
 - `$ ./configure`
 - `$ make`
 
-Note: you can activate the modification of the pkg flatsize by uncomment a line in pkg.c.
+<h6><em>Note: you can activate the modification of the pkg flatsize by uncomment line 1752 in libpkg/pkg.c.</em></h6>
 
 You will have access to the recompute function with `# src/pkg-static check -r package_name`.  
 
