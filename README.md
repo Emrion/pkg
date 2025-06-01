@@ -6,6 +6,8 @@ To get it:
 - `$ ./configure`
 - `$ make`
 
+Note: you can activate the modification of the pkg flatsize by uncomment a line in pkg.c.
+
 You will have access to the recompute function with `# src/pkg-static check -r package_name`.  
 
 Optionaly, you can install this modified pkg with `# make install` but this leaves the infos of the last pkg installed.
