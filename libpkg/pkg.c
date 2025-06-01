@@ -1782,9 +1782,6 @@ pkg_recompute(struct pkgdb *db, struct pkg *pkg, bool verbose)
 		sum = pkg_checksum_generate_file(f->path, type);
 		if (sum == NULL) {
 			rc = EPKG_FATAL;
-#ifdef REC_MODIFY_FLATSIZE
-			vec_free_and_free(&hl, free);
-#endif
 			break;
 		}
 #ifdef REC_MODIFY_FLATSIZE
