@@ -1743,43 +1743,82 @@ pkgs_search(pkgs_t *pkgs, char *el)
 	return (res);
 }
 
+/* If the following is uncommented, the recompute function will modify
+** the pkg flatsize in the database based on files changes.
+** It seems unnecessary as the files checking doesn't care of that.
+** Moreover, the flatsize is here often calculated slightly differently
+** than the one initialy in the pkg. Didn't find why up-to-now. */
+
+/* #define REC_MODIFY_FLATSIZE */
+
 int
 pkg_recompute(struct pkgdb *db, struct pkg *pkg, bool verbose)
 {
 	struct pkg_file *f = NULL;
-	int64_t flatsize = 0;
 	struct stat st;
 	pkg_checksum_type_t type;
-	char *newsum;
+	char *sum;
 	int rc = EPKG_OK;
+#ifdef REC_MODIFY_FLATSIZE
+	hardlinks_t hl = vec_init();
+	int64_t flatsize = 0;
+	bool regular = false;
+#endif
 
 	while (pkg_files(pkg, &f) == EPKG_OK) {
-
-		if (lstat(f->path, &st) == -1) 
+		if (lstat(f->path, &st) != 0)
 			continue;
-		if (!S_ISLNK(st.st_mode)) 
-			flatsize += st.st_size;
-
+#ifdef REC_MODIFY_FLATSIZE
+		if (S_ISLNK(st.st_mode))
+			regular = false;
+		else
+			regular = true;
+		if (st.st_nlink > 1)
+			regular = !check_for_hardlink(&hl, &st);
+#endif
 		type = pkg_checksum_file_get_type(f->sum, strlen(f->sum));
 		if (type == PKG_HASH_TYPE_UNKNOWN) 
 			type = PKG_HASH_TYPE_SHA256_HEX;
-		newsum = pkg_checksum_generate_file(f->path, type);
-		if (newsum == NULL) {
+		sum = pkg_checksum_generate_file(f->path, type);
+		if (sum == NULL) {
 			rc = EPKG_FATAL;
+#ifdef REC_MODIFY_FLATSIZE
+			vec_free_and_free(&hl, free);
+#endif
 			break;
 		}
-		if (strcmp(newsum, f->sum) != 0) {
+#ifdef REC_MODIFY_FLATSIZE
+		if (regular)
+			flatsize += st.st_size;
+#endif
+		if (strcmp(sum, f->sum) != 0) {
 			if (verbose) {
 				printf("Modified: %s\n", f->path);
 				printf("Init cks: %s\n", f->sum);
-				printf("New  cks: %s\n", newsum);
+				printf("New  cks: %s\n", sum);
 			}
-			pkgdb_file_set_cksum(db, f, newsum);
+			int r = pkgdb_file_set_cksum(db, f, sum);
+			if (verbose && r != EPKG_OK) 
+				printf("Cannot set cks, error: %d\n", r);
 		}
-		free(newsum);
+		free(sum);
 	}
-	if (rc == EPKG_OK && flatsize != pkg->flatsize)
-		pkg->flatsize = flatsize;
+#ifdef REC_MODIFY_FLATSIZE
+	vec_free_and_free(&hl, free);
+	
+	if (rc == EPKG_OK && flatsize != pkg->flatsize) {
+		rc = pkgdb_set(db, pkg, PKG_SET_FLATSIZE, flatsize);
+		if (verbose) {
+			printf("Init flatsize: %dl\n", pkg->flatsize);
+			printf("New  flatsize: %dl... ", flatsize);
+			if (rc == EPKG_OK)
+				printf("Set.\n");
+			else
+				printf("Error: %d\n", rc);
+		}
+		
+	}
+#endif
 	return (rc);
 }
 
