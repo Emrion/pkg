@@ -1775,6 +1775,8 @@ pkg_recompute(struct pkgdb *db, struct pkg *pkg, bool verbose)
 			regular = true;
 		if (st.st_nlink > 1)
 			regular = !check_for_hardlink(&hl, &st);
+		if (regular)
+			flatsize += st.st_size;
 #endif
 		type = pkg_checksum_file_get_type(f->sum, strlen(f->sum));
 		if (type == PKG_HASH_TYPE_UNKNOWN) 
@@ -1784,10 +1786,6 @@ pkg_recompute(struct pkgdb *db, struct pkg *pkg, bool verbose)
 			rc = EPKG_FATAL;
 			break;
 		}
-#ifdef REC_MODIFY_FLATSIZE
-		if (regular)
-			flatsize += st.st_size;
-#endif
 		if (strcmp(sum, f->sum) != 0) {
 			if (verbose) {
 				printf("Modified: %s\n", f->path);
