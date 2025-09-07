@@ -1008,7 +1008,7 @@ pkg_jobs_find_remote_pattern(struct pkg_jobs *j, struct job_pattern *jp)
 	struct pkg_job_request *req;
 
 	if (!(jp->flags & PKG_PATTERN_FLAG_FILE)) {
-		if (j->type == PKG_JOBS_UPGRADE && jp->match == MATCH_INTERNAL) {
+		if (j->type == PKG_JOBS_UPGRADE && (jp->match == MATCH_INTERNAL || jp->match == MATCH_EXACT)) {
 			/*
 			 * For upgrade patterns we must ensure that a local package is
 			 * installed as well.  This only works if we're operating on an
@@ -1450,47 +1450,45 @@ jobs_solve_autoremove(struct pkg_jobs *j)
 	return (EPKG_OK);
 }
 
+/*
+ * Do we need to touch this package as part of an upgrade job?
+ */
 static bool
-pkg_jobs_check_remote_candidate(struct pkg_jobs *j, struct pkg *pkg)
+is_upgrade_candidate(struct pkg_jobs *j, struct pkg *pkg)
 {
 	struct pkgdb_it *it;
 	struct pkg *p = NULL;
+
+	/* A forced upgrade upgrades everything. */
+	if ((j->flags & PKG_FLAG_FORCE) != 0)
+		return (true);
 
 	/* If we have no digest, we need to check this package */
 	if (pkg->digest == NULL)
 		return (true);
 
+	/* Does a remote repo have a different version of this package? */
 	it = pkgdb_repo_query2(j->db, pkg->uid, MATCH_INTERNAL, j->reponames);
 	if (it != NULL) {
-		/*
-		 * If we have the same package in a remote repo, it is not an
-		 * installation candidate
-		 */
-		int npkg = 0;
-
 		while (pkgdb_it_next(it, &p, PKG_LOAD_BASIC) == EPKG_OK) {
-			/*
-			 * Check package with the same uid and explore whether digest
-			 * has been changed
-			 */
-			if (!STREQ(p->digest, pkg->digest))
-				npkg ++;
-
+			if (!STREQ(p->digest, pkg->digest)) {
+				/* Found an upgrade candidate. */
+				pkg_free(p);
+				pkgdb_it_free(it);
+				return (true);
+			}
 			pkg_free(p);
 			p = NULL;
 		}
-
 		pkgdb_it_free(it);
-
-		if (npkg == 0)
-			return (false);
+		return (false);
 	}
 
 	return (true);
 }
 
 static candidates_t *
-pkg_jobs_find_install_candidates(struct pkg_jobs *j)
+pkg_jobs_find_upgrade_candidates(struct pkg_jobs *j)
 {
 	struct pkg *pkg = NULL;
 	struct pkgdb_it *it;
@@ -1500,13 +1498,9 @@ pkg_jobs_find_install_candidates(struct pkg_jobs *j)
 		return (NULL);
 
 	candidates = xcalloc(1, sizeof(*candidates));
-
 	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC) == EPKG_OK) {
-
-		if ((j->flags & PKG_FLAG_FORCE) ||
-						pkg_jobs_check_remote_candidate(j, pkg)) {
+		if (is_upgrade_candidate(j, pkg))
 			vec_push(candidates, pkg->id);
-		}
 		pkg_free(pkg);
 		pkg = NULL;
 	}
@@ -1531,7 +1525,7 @@ jobs_solve_full_upgrade(struct pkg_jobs *j)
 
 	assert(!j->solved);
 
-	candidates = pkg_jobs_find_install_candidates(j);
+	candidates = pkg_jobs_find_upgrade_candidates(j);
 	jcount = candidates->len;
 
 	pkg_emit_progress_start("Checking for upgrades (%zd candidates)",

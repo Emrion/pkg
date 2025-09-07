@@ -89,7 +89,7 @@ pkg_delete(struct pkg *pkg, struct pkg *rpkg, struct pkgdb *db, int flags,
 	if (handle_rc)
 		pkg_start_stop_rc_scripts(pkg, PKG_RC_STOP);
 
-	if ((flags & (PKG_DELETE_NOSCRIPT | PKG_DELETE_UPGRADE)) == 0) {
+	if ((flags & PKG_DELETE_NOSCRIPT) == 0) {
 		bool noexec = ((flags & PKG_DELETE_NOEXEC) == PKG_DELETE_NOEXEC);
 		pkg_open_root_fd(pkg);
 		ret = pkg_lua_script_run(pkg, PKG_LUA_PRE_DEINSTALL, false);
@@ -100,13 +100,13 @@ pkg_delete(struct pkg *pkg, struct pkg *rpkg, struct pkgdb *db, int flags,
 			return (ret);
 	}
 
-	ret = pkg_delete_files(pkg, rpkg, flags, t);
+	ret = pkg_delete_files(db, pkg, rpkg, flags, t);
 	if (ret == EPKG_CANCEL)
 		cancel = 1;
 	else if (ret != EPKG_OK)
 		return (ret);
 
-	if ((flags & (PKG_DELETE_NOSCRIPT | PKG_DELETE_UPGRADE)) == 0) {
+	if ((flags & PKG_DELETE_NOSCRIPT) == 0) {
 		bool noexec = ((flags & PKG_DELETE_NOEXEC) == PKG_DELETE_NOEXEC);
 		pkg_lua_script_run(pkg, PKG_LUA_POST_DEINSTALL, false);
 		ret = pkg_script_run(pkg, PKG_SCRIPT_POST_DEINSTALL, false, noexec);
@@ -118,23 +118,21 @@ pkg_delete(struct pkg *pkg, struct pkg *rpkg, struct pkgdb *db, int flags,
 	if (ret != EPKG_OK)
 		return (ret);
 
-	if ((flags & PKG_DELETE_UPGRADE) == 0) {
-		pkg_emit_deinstall_finished(pkg);
-		vec_foreach(pkg->message, i) {
-			if (pkg->message.d[i]->type == PKG_MESSAGE_REMOVE) {
-				if (message == NULL) {
-					message = xstring_new();
-					pkg_fprintf(message->fp, "Message from "
-					    "%n-%v:\n", pkg, pkg);
-				}
-				fprintf(message->fp, "%s\n", pkg->message.d[i]->str);
+	pkg_emit_deinstall_finished(pkg);
+	vec_foreach(pkg->message, i) {
+		if (pkg->message.d[i]->type == PKG_MESSAGE_REMOVE) {
+			if (message == NULL) {
+				message = xstring_new();
+				pkg_fprintf(message->fp, "Message from "
+				    "%n-%v:\n", pkg, pkg);
 			}
+			fprintf(message->fp, "%s\n", pkg->message.d[i]->str);
 		}
-		if (pkg_has_message(pkg) && message != NULL) {
-			fflush(message->fp);
-			pkg_emit_message(message->buf);
-			xstring_free(message);
-		}
+	}
+	if (pkg_has_message(pkg) && message != NULL) {
+		fflush(message->fp);
+		pkg_emit_message(message->buf);
+		xstring_free(message);
 	}
 
 	ret = pkgdb_unregister_pkg(db, pkg->id);
@@ -355,11 +353,10 @@ pkg_delete_skip_config(struct pkg *pkg, struct pkg *rpkg, struct pkg_file *file,
 }
 
 int
-pkg_delete_files(struct pkg *pkg, struct pkg *rpkg, int flags,
+pkg_delete_files(struct pkgdb *db, struct pkg *pkg, struct pkg *rpkg, int flags,
     struct triggers *t)
 {
 	struct pkg_file	*file = NULL;
-
 	int		nfiles, cur_file = 0;
 	int		retcode = EPKG_OK;
 
@@ -373,6 +370,8 @@ pkg_delete_files(struct pkg *pkg, struct pkg *rpkg, int flags,
 	while (pkg_files(pkg, &file) == EPKG_OK) {
 		if (pkg_delete_skip_config(pkg, rpkg, file, flags))
 			continue;
+		if ((flags & PKG_DELETE_UPGRADE) != 0)
+			pkg_maybe_backup_library(db, pkg, file->path);
 		append_touched_file(file->path);
 		if (pkg_emit_progress_tick(cur_file++, nfiles))
 			retcode = EPKG_CANCEL;
